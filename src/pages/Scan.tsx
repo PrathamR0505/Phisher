@@ -1,7 +1,7 @@
-import { useState, Component, type ReactNode } from 'react'
+import { useState, Component, useRef, type ReactNode } from 'react'
 import Spline from '@splinetool/react-spline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertTriangle, ShieldCheck, Search, Link2, CheckCircle, XCircle, AlertOctagon } from 'lucide-react'
+import { AlertTriangle, ShieldCheck, Search, Link2, CheckCircle, XCircle, AlertOctagon, FileText, Image as ImageIcon, Upload } from 'lucide-react'
 
 class SplineErrorBoundary extends Component<{ children: ReactNode }> {
   state = { hasError: false }
@@ -22,26 +22,67 @@ type ScanResult = { prediction: 'safe' | 'phishing' | 'suspicious'; risk_score: 
 export function Scan() {
   const [text, setText] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [result, setResult] = useState<ScanResult | null>(null)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!text.trim()) return
     setStatus('loading')
+    setErrorMessage(null)
     try {
-      // Using localhost for better compatibility with some browser security policies
-      const res = await fetch('http://localhost:5000/predict', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ email: text }) 
+      const res = await fetch('http://127.0.0.1:5000/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: text })
       })
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || `HTTP error! status: ${res.status}`)
+      }
       const data = await res.json()
       setResult(data)
       setStatus('success')
-    } catch (err) { 
+    } catch (err: any) {
       console.error('Scan failed:', err)
-      setStatus('error') 
+      setErrorMessage(err.message || 'Connection failed')
+      setStatus('error')
+    }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setStatus('loading')
+    setErrorMessage(null)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const res = await fetch('http://127.0.0.1:5000/predict-file', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || `HTTP error! status: ${res.status}`)
+      }
+
+      const data = await res.json()
+      setResult(data)
+      setStatus('success')
+    } catch (err: any) {
+      console.error('File scan failed:', err)
+      setErrorMessage(err.message || 'File processing failed')
+      setStatus('error')
+    } finally {
+      // Reset input so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -57,22 +98,58 @@ export function Scan() {
             <div className={`flex h-10 w-10 items-center justify-center rounded-full ${isPhishing ? 'bg-rose-500/20 text-rose-400' : isSuspicious ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
               <Search className="h-5 w-5" />
             </div>
-            <h1 className="text-2xl font-bold text-white">EMAIL / URL THREAT SCANNER</h1>
+            <h1 className="text-2xl font-bold text-white uppercase tracking-tight">Email / File Scanner</h1>
           </div>
+
           <form onSubmit={handleScan} className="flex flex-1 flex-col gap-4">
-            <div className="pointer-events-auto relative flex min-h-[220px] flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/20 focus-within:border-white/30">
+            <div className="pointer-events-auto relative flex min-h-[220px] flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/20 focus-within:border-white/30 transition-all">
               <div className="absolute inset-0 z-0 overflow-hidden rounded-2xl">
                 <div className="absolute left-1/2 top-1/2 h-[120%] w-[120%] -translate-x-1/2 -translate-y-1/2">
                   <SplineErrorBoundary><Spline scene="https://prod.spline.design/gqdgUa0EgIl1DKRK/scene.splinecode" style={{ width: '100%', height: '100%', position: 'absolute' }} /></SplineErrorBoundary>
                 </div>
               </div>
               <div className="pointer-events-none absolute inset-0 z-0 bg-black/40 mix-blend-overlay" />
-              <textarea className="pointer-events-auto relative z-10 flex-1 resize-none bg-transparent p-5 text-sm text-white/90 placeholder:text-white/50 focus:outline-none" placeholder="Paste email content, URLs, or suspicious text here..." value={text} onChange={(e) => setText(e.target.value)} disabled={status === 'loading'} />
+              <textarea className="pointer-events-auto relative z-10 flex-1 resize-none bg-transparent p-5 text-sm text-white/90 placeholder:text-white/50 focus:outline-none" placeholder="Paste email content here, or upload a file below..." value={text} onChange={(e) => setText(e.target.value)} disabled={status === 'loading'} />
             </div>
-            <button type="submit" disabled={status === 'loading' || !text.trim()} className={`pointer-events-auto flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 font-bold transition-all active:scale-[0.98] disabled:opacity-50 ${isPhishing ? 'bg-rose-500 hover:bg-rose-600' : isSuspicious ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'} text-white`}>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={status === 'loading'}
+                className="pointer-events-auto flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-[10px] font-bold tracking-[0.2em] text-white/70 transition hover:bg-white/10 hover:text-white active:scale-95 disabled:opacity-50"
+              >
+                <FileText className="h-4 w-4" />
+                <span>UPLOAD PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={status === 'loading'}
+                className="pointer-events-auto flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-4 text-[10px] font-bold tracking-[0.2em] text-white/70 transition hover:bg-white/10 hover:text-white active:scale-95 disabled:opacity-50"
+              >
+                <ImageIcon className="h-4 w-4" />
+                <span>UPLOAD IMAGE</span>
+              </button>
+            </div>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+              accept=".pdf,image/*"
+            />
+
+            <button type="submit" disabled={status === 'loading' || !text.trim()} className={`pointer-events-auto flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 font-bold transition-all active:scale-[0.98] disabled:opacity-50 ${isPhishing ? 'bg-rose-500 hover:bg-rose-600 shadow-[0_4px_12px_rgba(244,63,94,0.3)]' : isSuspicious ? 'bg-amber-500 hover:bg-amber-600 shadow-[0_4px_12px_rgba(245,158,11,0.3)]' : 'bg-emerald-500 hover:bg-emerald-600 shadow-[0_4px_12px_rgba(16,185,129,0.3)]'} text-white`}>
               {status === 'loading' ? <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <><Search className="h-5 w-5" /><span>INITIATE SCAN</span></>}
             </button>
-            {status === 'error' && <p className="text-center text-xs text-red-400">Backend not running. Start: cd backend && python app.py</p>}
+
+            {status === 'error' && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-center">
+                <p className="text-xs text-rose-400 font-medium">{errorMessage || "Backend not running"}</p>
+              </motion.div>
+            )}
           </form>
         </motion.div>
 
@@ -85,11 +162,11 @@ export function Scan() {
               <div className={`relative z-10 mb-8 flex flex-col items-center justify-center overflow-hidden rounded-2xl border p-8 transition-all ${isPhishing ? 'border-rose-500/40 bg-gradient-to-b from-rose-500/20 shadow-[0_0_60px_rgba(244,63,94,0.3)] animate-[pulse-shadow_2s_ease-in-out_infinite]' : isSuspicious ? 'border-amber-500/40 bg-gradient-to-b from-amber-500/20 shadow-[0_0_60px_rgba(245,158,11,0.3)] animate-[suspicious-pulse_2.5s_ease-in-out_infinite]' : 'border-emerald-500/40 bg-gradient-to-b from-emerald-500/20 shadow-[0_0_60px_rgba(16,185,129,0.25)] animate-[safe-glow_3s_ease-in-out_infinite]'}`}>
                 {isPhishing && <motion.div animate={{ y: ['-100%', '400%'] }} transition={{ repeat: Infinity, duration: 2, ease: 'linear' }} className="pointer-events-none absolute left-0 top-0 h-32 w-full bg-gradient-to-b from-transparent via-rose-500/20 to-transparent" />}
                 {isSuspicious && <><motion.div animate={{ y: ['-100%', '400%'] }} transition={{ repeat: Infinity, duration: 3, ease: 'linear' }} className="pointer-events-none absolute left-0 top-0 h-32 w-full bg-gradient-to-b from-transparent via-amber-500/15 to-transparent" /><motion.div animate={{ scale: [1, 1.1, 1], opacity: [0.8, 1, 0.8] }} transition={{ repeat: Infinity, duration: 1.5 }} className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-amber-500/20" /></>}
-                {isSafe && <><motion.div animate={{ y: [0, -10, 0], opacity: [0.3, 0.6, 0.3] }} transition={{ repeat: Infinity, duration: 3 }} className="pointer-events-none absolute inset-0 bg-gradient-to-t from-emerald-500/10 via-transparent to-transparent" /><motion.div animate={{ x: [-20, 20, -20] }} transition={{ repeat: Infinity, duration: 4 }} className="pointer-events-none absolute h-1 w-32 rounded-full bg-emerald-400/30 blur-sm" style={{ top: '20%', left: '50%', transform: 'translateX(-50%)' }} /><div className="pointer-events-none absolute h-1 w-24 rounded-full bg-emerald-400/20 blur-sm" style={{ top: '70%', left: '50%', transform: 'translateX(-50%)' }} />{Array.from({length: 3}).map((_, i) => <motion.div key={i} animate={{ y: [0, -30, 0], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 2.5 + i * 0.5, delay: i * 0.8 }} className="pointer-events-none absolute h-2 w-2 rounded-full bg-emerald-400/50" style={{ left: `${30 + i * 20}%`, bottom: '10%' }} />)}</>}
+                {isSafe && <><motion.div animate={{ y: [0, -10, 0], opacity: [0.3, 0.6, 0.3] }} transition={{ repeat: Infinity, duration: 3 }} className="pointer-events-none absolute inset-0 bg-gradient-to-t from-emerald-500/10 via-transparent to-transparent" /><motion.div animate={{ x: [-20, 20, -20] }} transition={{ repeat: Infinity, duration: 4 }} className="pointer-events-none absolute h-1 w-32 rounded-full bg-emerald-400/30 blur-sm" style={{ top: '20%', left: '50%', transform: 'translateX(-50%)' }} /><div className="pointer-events-none absolute h-1 w-24 rounded-full bg-emerald-400/20 blur-sm" style={{ top: '70%', left: '50%', transform: 'translateX(-50%)' }} />{Array.from({ length: 3 }).map((_, i) => <motion.div key={i} animate={{ y: [0, -30, 0], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 2.5 + i * 0.5, delay: i * 0.8 }} className="pointer-events-none absolute h-2 w-2 rounded-full bg-emerald-400/50" style={{ left: `${30 + i * 20}%`, bottom: '10%' }} />)}</>}
                 {isPhishing ? <motion.div animate={{ scale: [1, 1.15, 1], rotate: [-5, 5, -5] }} transition={{ repeat: Infinity, duration: 2.5 }}><AlertTriangle className="mb-4 h-20 w-20 text-rose-500 drop-shadow-[0_0_30px_rgba(244,63,94,0.8)]" /></motion.div> : isSuspicious ? <motion.div animate={{ scale: [1, 1.1, 1], rotate: [-2, 2, -2] }} transition={{ repeat: Infinity, duration: 2 }}><AlertOctagon className="mb-4 h-20 w-20 text-amber-400 drop-shadow-[0_0_30px_rgba(245,158,11,0.8)]" /></motion.div> : <motion.div animate={{ y: [0, -8, 0], scale: [1, 1.05, 1] }} transition={{ repeat: Infinity, duration: 4 }}><ShieldCheck className="mb-4 h-20 w-20 text-emerald-400 drop-shadow-[0_0_30px_rgba(52,211,153,0.7)]" /></motion.div>}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className={`text-4xl font-black uppercase tracking-widest ${isPhishing ? 'text-rose-400' : isSuspicious ? 'text-amber-400' : 'text-emerald-400'}`}>{result.prediction}</motion.div>
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-4 flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.15em] text-white/50">Risk Score <span className={`rounded-md border px-2.5 py-1 text-xs font-black ${result.risk_score >= 60 ? 'border-rose-500/50 bg-rose-500/30 text-rose-300' : result.risk_score >= 40 ? 'border-amber-500/50 bg-amber-500/30 text-amber-300' : 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'}`}>{result.risk_score}%</span></motion.div>
-                {isSafe && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="mt-4 text-sm text-emerald-300/80">This email appears legitimate</motion.p>}
+                {isSafe && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="mt-4 text-sm text-emerald-300/80">This content appears legitimate</motion.p>}
                 {isSuspicious && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="mt-4 text-sm text-amber-300/80">Requires extra verification</motion.p>}
               </div>
 
