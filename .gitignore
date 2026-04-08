@@ -1,0 +1,26 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+.venv/
+.ruff_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Model Files & Data (Keeping repo clean)
+*.pkl
+*.csv
+
+# Logs & Output
+*.log
+lint-output.txt
+tsc-output.txt
+
+# OS Files
+.DS_Store
+Thumbs.db
