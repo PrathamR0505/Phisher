@@ -29,11 +29,20 @@ export function Scan() {
     if (!text.trim()) return
     setStatus('loading')
     try {
-      const res = await fetch('http://127.0.0.1:5000/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: text }) })
-      if (!res.ok) throw new Error()
-      setResult(await res.json())
+      // Using localhost for better compatibility with some browser security policies
+      const res = await fetch('http://localhost:5000/predict', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ email: text }) 
+      })
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+      const data = await res.json()
+      setResult(data)
       setStatus('success')
-    } catch { setStatus('error') }
+    } catch (err) { 
+      console.error('Scan failed:', err)
+      setStatus('error') 
+    }
   }
 
   const isPhishing = result?.prediction?.toLowerCase() === 'phishing'

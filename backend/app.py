@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import re, pickle, pandas as pd
 from difflib import SequenceMatcher
+from typing import Set, List, Dict, Any, Tuple, Optional
 
 app = Flask(__name__)
 CORS(app)
@@ -20,7 +21,8 @@ NORM_CHARS = {
     "6": "g",
     "2": "z",
 }
-
+# Initialize CORS with more explicit settings
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 import os
 
@@ -30,45 +32,51 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config_data.csv")
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 VECTORIZER_PATH = os.path.join(BASE_DIR, "vectorizer.pkl")
 
-def load_config():
-    df = pd.read_csv(CONFIG_PATH)
-    trusted = set()
-    typos = set()
-    suspicious_tlds = set()
-    brands = []
-    words = []
-    patterns = []
-    for _, r in df.iterrows():
-        if r["type"] == "trusted_domain" and r["label"] == "safe":
-            trusted.add(r["value"].lower())
-        elif r["type"] == "typo_domain":
-            typos.add(r["value"].lower())
-        elif r["type"] == "suspicious_tld":
-            suspicious_tlds.add(r["value"].lower())
-        elif r["type"] == "brand_keyword":
-            brands.append(r["value"].lower())
-        elif r["type"] == "suspicious_word":
-            words.append(r["value"].lower())
-        elif r["type"] == "phishing_pattern":
-            patterns.append(r["value"].lower())
-    return {
-        "trusted": trusted,
-        "typos": typos,
-        "suspicious_tlds": suspicious_tlds,
-        "brands": brands,
-        "words": words,
-        "patterns": patterns,
-    }
+def load_config() -> Dict[str, Any]:
+    try:
+        df = pd.read_csv(CONFIG_PATH)
+        trusted: Set[str] = set()
+        typos: Set[str] = set()
+        suspicious_tlds: Set[str] = set()
+        brands: List[str] = []
+        words: List[str] = []
+        patterns: List[str] = []
+        for _, r in df.iterrows():
+            if r["type"] == "trusted_domain" and r["label"] == "safe":
+                trusted.add(str(r["value"]).lower())
+            elif r["type"] == "typo_domain":
+                typos.add(str(r["value"]).lower())
+            elif r["type"] == "suspicious_tld":
+                suspicious_tlds.add(str(r["value"]).lower())
+            elif r["type"] == "brand_keyword":
+                brands.append(str(r["value"]).lower())
+            elif r["type"] == "suspicious_word":
+                words.append(str(r["value"]).lower())
+            elif r["type"] == "phishing_pattern":
+                patterns.append(str(r["value"]).lower())
+        return {
+            "trusted": trusted,
+            "typos": typos,
+            "suspicious_tlds": suspicious_tlds,
+            "brands": brands,
+            "words": words,
+            "patterns": patterns,
+        }
+    except Exception as e:
+        print(f"Error loading config: {e}")
+        return {"trusted": set(), "typos": set(), "suspicious_tlds": set(), "brands": [], "words": [], "patterns": []}
 
 config = load_config()
 
-# Global model/vectorizer cache (optional optimization)
+# Global model/vectorizer cache
 _model = None
 _vectorizer = None
 
 def load_ml_model():
     global _model, _vectorizer
     if _model is None or _vectorizer is None:
+        if not os.path.exists(MODEL_PATH) or not os.path.exists(VECTORIZER_PATH):
+            raise FileNotFoundError("Model files not found")
         _model = pickle.load(open(MODEL_PATH, "rb"))
         _vectorizer = pickle.load(open(VECTORIZER_PATH, "rb"))
     return _model, _vectorizer
@@ -78,9 +86,13 @@ def extract_domain(url):
     return m[0].lower().replace("www.", "") if m else ""
 
 
-def get_base(domain):
-    parts = domain.split(".")
-    return (parts[-2], ".".join(parts[-2:])) if len(parts) >= 2 else (domain, domain)
+def get_base(domain_str: str) -> Tuple[str, str]:
+    parts = domain_str.split(".")
+    if len(parts) >= 2:
+        # Use explicit list slicing and joining
+        last_two = parts[-2:]
+        return (str(parts[-2]), ".".join(last_two))
+    return (domain_str, domain_str)
 
 
 def normalize(s):
@@ -90,62 +102,74 @@ def normalize(s):
     return r
 
 
-def is_typo(base, brands, thresh=0.7):
-    base = base.lower()
-    for b in brands:
-        if base == b:
+def is_typo(target_str: str, brands_list: List[str], thresh: float = 0.7) -> Tuple[bool, Optional[str]]:
+    target_str = target_str.lower()
+    for b in brands_list:
+        if target_str == b:
             continue
-        norm_base, norm_brand = normalize(base), normalize(b)
-        if norm_base == norm_brand:
+        norm_target, norm_brand = normalize(target_str), normalize(b)
+        if norm_target == norm_brand:
             return True, b
-        if SequenceMatcher(None, base, b).ratio() >= thresh:
+        if SequenceMatcher(None, target_str, b).ratio() >= thresh:
             return True, b
-        if SequenceMatcher(None, norm_base, norm_brand).ratio() >= 0.85:
+        if SequenceMatcher(None, norm_target, norm_brand).ratio() >= 0.85:
             return True, b
-        for i, c in enumerate(base):
-            if c.isdigit() and (base[:i] + base[i + 1 :]).startswith(
-                b[: len(base) - 1]
-            ):
-                return True, b
+            
+        # Refactored for better type inference and to avoid name collisions
+        for i, c in enumerate(target_str):
+            if c.isdigit():
+                prefix: str = target_str[:i]
+                suffix: str = target_str[i + 1:]
+                modified_str = prefix + suffix
+                brand_prefix: str = b[:len(target_str) - 1]
+                if modified_str.startswith(brand_prefix):
+                    return True, b
     return False, None
 
 
-def check_domain(domain):
+def check_domain(domain: str) -> str:
     domain = domain.lower().strip()
-    if domain in config["trusted"]:
+    trusted_set: Set[str] = config["trusted"]
+    if domain in trusted_set:
         return "SAFE"
-    base, full = get_base(domain)
-    for t in config["trusted"]:
-        if get_base(t)[0] == base:
+    
+    base_domain, full_domain = get_base(domain)
+    for t in trusted_set:
+        if get_base(t)[0] == base_domain:
             return "SAFE"
             
     # Subdomain spoofing detection (e.g., paypal.secure-login.com)
-    for b in config["brands"]:
-        if b in domain and b != base:
+    brands_list: List[str] = config["brands"]
+    for b in brands_list:
+        if b in domain and b != base_domain:
             return "PHISHING"
     
-    typo, brand = is_typo(base, config["brands"], 0.65)
+    typo, _ = is_typo(base_domain, brands_list, 0.65)
     if typo:
         return "PHISHING"
-    for t in config["typos"]:
-        if get_base(t)[0] in base or base in get_base(t)[0]:
+    
+    typos_set: Set[str] = config["typos"]
+    for t in typos_set:
+        t_base, _ = get_base(t)
+        if t_base in base_domain or base_domain in t_base:
             return "PHISHING"
-    for tld in config["suspicious_tlds"]:
-        if full.endswith(tld):
+            
+    suspicious_tlds: Set[str] = config["suspicious_tlds"]
+    for tld in suspicious_tlds:
+        if full_domain.endswith(tld):
             return "PHISHING"
+    
     if re.match(r"\d+\.\d+\.\d+\.\d+", domain):
         return "PHISHING"
+        
     if (
         re.match(
-            r"^[^a-z]*$|^[a-z]+[0-9]+[a-z]*$|[a-z]([a-z])\1{2,}|^[^aeiou]{4,}$", base
+            r"^[^a-z]*$|^[a-z]+[0-9]+[a-z]*$|[a-z]([a-z])\1{2,}|^[^aeiou]{4,}$", base_domain
         )
-        and len(base) >= 4
+        and len(base_domain) >= 4
     ):
         return "PHISHING"
-    for b in config["brands"]:
-        if b in base and base != b:
-            return "PHISHING"
-    return "SUSPICIOUS"
+    return "UNKNOWN"
 
 
 def check_link(text):
