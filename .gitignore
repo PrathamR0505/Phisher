@@ -27,6 +27,13 @@ backend/dataset.csv
 lint-output.txt
 tsc-output.txt
 
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
 # OS Files
 .DS_Store
 Thumbs.db
+desktop.ini
