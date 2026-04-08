@@ -11,9 +11,16 @@ import pytesseract
 from PIL import Image
 
 app = Flask(__name__, static_folder="../dist", static_url_path="/")
-# Initialize CORS broadly for development
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+]
+
 CORS(app, resources={r"/*": {
-    "origins": "*",
+    "origins": allowed_origins if allowed_origins else "*",
     "methods": ["GET", "POST", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }})
@@ -278,6 +285,8 @@ def predict_file():
                 extracted_text = " ".join([page.extract_text() or "" for page in pdf.pages])
         elif filename.endswith(('.png', '.jpg', '.jpeg', '.webp')):
             img = Image.open(file.stream)
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
             extracted_text = pytesseract.image_to_string(img)
         else:
             return jsonify({"error": "Unsupported file type"}), 400
@@ -287,6 +296,10 @@ def predict_file():
     except Exception as e:
         print(f"Error processing file: {e}")
         return jsonify({"error": f"Error processing file: {str(e)}"}), 500
+
+@app.errorhandler(413)
+def file_too_large(_error):
+    return jsonify({"error": "File is too large. Please upload a file smaller than 10 MB."}), 413
 
 @app.route("/check-domain", methods=["POST"])
 def check_domain_api():

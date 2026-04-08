@@ -48,11 +48,27 @@ A comprehensive phishing detection application featuring a rule-based engine, a 
    ```bash
    npm install
    ```
+2. **Set the API URL**:
+   ```bash
+   # .env.local
+   VITE_API_URL=http://127.0.0.1:5000
+   ```
 2. **Run Dev Server**:
    ```bash
    npm run dev
    ```
    *The frontend runs on `http://localhost:5173`.*
+
+## Deployment Notes
+- For **Vercel**, set `VITE_API_URL` to your Render backend URL, for example:
+  ```bash
+  VITE_API_URL=https://your-backend-name.onrender.com
+  ```
+- For **Render**, optionally set `CORS_ORIGINS` to your Vercel site URL for stricter CORS:
+  ```bash
+  CORS_ORIGINS=https://your-frontend-name.vercel.app
+  ```
+- The frontend now refuses to use `127.0.0.1` in production, so if `VITE_API_URL` is missing you will see a clear error instead of silent upload failures.
 
 ## ⚙️ Configuration
 The rule-based detection is controlled via `backend/config_data.csv`. You can add trusted domains, typo keywords, and suspicious patterns directly to this file to tune the accuracy.

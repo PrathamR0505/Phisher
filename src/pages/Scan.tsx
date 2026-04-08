@@ -19,7 +19,17 @@ console.error = (() => {
 
 type ScanResult = { prediction: 'safe' | 'phishing' | 'suspicious'; risk_score: number; reasons: string[]; links: { link: string; domain: string; status: 'safe' | 'phishing' | 'suspicious' }[] }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
+const resolveApiBase = () => {
+  const configuredApiUrl = import.meta.env.VITE_API_URL?.trim()
+  if (configuredApiUrl) return configuredApiUrl.replace(/\/+$/, '')
+
+  if (import.meta.env.DEV) return 'http://127.0.0.1:5000'
+
+  // In production, require an explicit API URL instead of falling back to the user's localhost.
+  return ''
+}
+
+const API_BASE = resolveApiBase()
 
 export function Scan() {
   const [text, setText] = useState('')
@@ -32,6 +42,11 @@ export function Scan() {
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!text.trim()) return
+    if (!API_BASE) {
+      setErrorMessage('Backend URL is not configured. Set VITE_API_URL to your Render backend URL.')
+      setStatus('error')
+      return
+    }
     setStatus('loading')
     setErrorMessage(null)
     try {
@@ -57,6 +72,12 @@ export function Scan() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!API_BASE) {
+      setErrorMessage('Backend URL is not configured. Set VITE_API_URL to your Render backend URL.')
+      setStatus('error')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
 
     setStatus('loading')
     setErrorMessage(null)
