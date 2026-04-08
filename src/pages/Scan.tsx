@@ -19,6 +19,8 @@ console.error = (() => {
 
 type ScanResult = { prediction: 'safe' | 'phishing' | 'suspicious'; risk_score: number; reasons: string[]; links: { link: string; domain: string; status: 'safe' | 'phishing' | 'suspicious' }[] }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000'
+
 export function Scan() {
   const [text, setText] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -33,7 +35,7 @@ export function Scan() {
     setStatus('loading')
     setErrorMessage(null)
     try {
-      const res = await fetch('http://127.0.0.1:5000/predict', {
+      const res = await fetch(`${API_BASE}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: text })
@@ -63,7 +65,7 @@ export function Scan() {
     formData.append('file', file)
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/predict-file', {
+      const res = await fetch(`${API_BASE}/predict-file`, {
         method: 'POST',
         body: formData,
       })
