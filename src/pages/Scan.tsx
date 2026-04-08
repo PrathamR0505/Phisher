@@ -1,7 +1,7 @@
 import { useState, Component, useRef, type ReactNode } from 'react'
 import Spline from '@splinetool/react-spline'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertTriangle, ShieldCheck, Search, Link2, CheckCircle, XCircle, AlertOctagon, FileText, Image as ImageIcon, Upload } from 'lucide-react'
+import { AlertTriangle, ShieldCheck, Search, Link2, CheckCircle, XCircle, AlertOctagon, FileText, Image as ImageIcon } from 'lucide-react'
 
 class SplineErrorBoundary extends Component<{ children: ReactNode }> {
   state = { hasError: false }
