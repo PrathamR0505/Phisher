@@ -22,8 +22,16 @@ NORM_CHARS = {
 }
 
 
+import os
+
+# Define paths relative to the script location
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config_data.csv")
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+VECTORIZER_PATH = os.path.join(BASE_DIR, "vectorizer.pkl")
+
 def load_config():
-    df = pd.read_csv("config_data.csv")
+    df = pd.read_csv(CONFIG_PATH)
     trusted = set()
     typos = set()
     suspicious_tlds = set()
@@ -52,9 +60,18 @@ def load_config():
         "patterns": patterns,
     }
 
-
 config = load_config()
 
+# Global model/vectorizer cache (optional optimization)
+_model = None
+_vectorizer = None
+
+def load_ml_model():
+    global _model, _vectorizer
+    if _model is None or _vectorizer is None:
+        _model = pickle.load(open(MODEL_PATH, "rb"))
+        _vectorizer = pickle.load(open(VECTORIZER_PATH, "rb"))
+    return _model, _vectorizer
 
 def extract_domain(url):
     m = re.findall(r"https?://([^/]+)", url)
@@ -106,7 +123,7 @@ def check_domain(domain):
     for b in config["brands"]:
         if b in domain and b != base:
             return "PHISHING"
-
+    
     typo, brand = is_typo(base, config["brands"], 0.65)
     if typo:
         return "PHISHING"
@@ -149,7 +166,6 @@ def count_suspicious(text):
     found = [w for w in words if w in config["words"]]
     return len(found), found
 
-
 @app.route("/")
 def home():
     return jsonify({"status": "Backend is running", "endpoints": ["/predict", "/check-domain", "/reload-config"]})
@@ -158,8 +174,7 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        model = pickle.load(open("model.pkl", "rb"))
-        vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
+        model, vectorizer = load_ml_model()
         ml_available = True
     except:
         ml_available = False
