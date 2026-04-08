@@ -2,7 +2,7 @@
 # This file installs system dependencies like Tesseract OCR
 
 [phases.setup]
-nixPkgs = ["...", "tesseract", "libtesseract", "pkg-config"]
+nixPkgs = ["tesseract", "libtesseract", "pkg-config"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt", "npm install"]

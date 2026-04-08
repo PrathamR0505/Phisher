@@ -6,6 +6,7 @@ import pandas as pd
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Tuple, Optional
 import os
+import shutil
 import pdfplumber
 import pytesseract
 from PIL import Image
@@ -25,23 +26,44 @@ CORS(app, resources={r"/*": {
     "allow_headers": ["Content-Type", "Authorization"]
 }})
 
-# Configure Tesseract path
-# 1. Check Windows default path
-TESSERACT_PATH_WIN = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-# 2. Check common Linux/Render paths
-TESSERACT_PATHS_LINUX = ["/usr/bin/tesseract", "/usr/local/bin/tesseract", "/nix/store/*/bin/tesseract"]
+def configure_tesseract() -> Optional[str]:
+    env_path = os.environ.get("TESSERACT_CMD", "").strip()
+    if env_path and os.path.exists(env_path):
+        pytesseract.pytesseract.tesseract_cmd = env_path
+        return env_path
 
-if os.path.exists(TESSERACT_PATH_WIN):
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH_WIN
-else:
-    # On Linux/Render, it might be in the PATH or specific Nix locations
-    for path_glob in TESSERACT_PATHS_LINUX:
-        import glob
+    windows_default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(windows_default):
+        pytesseract.pytesseract.tesseract_cmd = windows_default
+        return windows_default
+
+    path_binary = shutil.which("tesseract")
+    if path_binary:
+        pytesseract.pytesseract.tesseract_cmd = path_binary
+        return path_binary
+
+    import glob
+
+    for path_glob in ["/usr/bin/tesseract", "/usr/local/bin/tesseract", "/nix/store/*/bin/tesseract"]:
         matches = glob.glob(path_glob)
         if matches:
             pytesseract.pytesseract.tesseract_cmd = matches[0]
-            break
-# If still not set, pytesseract will try 'tesseract' from system PATH
+            return matches[0]
+
+    return None
+
+TESSERACT_CMD = configure_tesseract()
+
+def ensure_tesseract_available() -> None:
+    try:
+        pytesseract.get_tesseract_version()
+    except Exception as exc:
+        configured_path = getattr(pytesseract.pytesseract, "tesseract_cmd", "tesseract")
+        raise RuntimeError(
+            "Tesseract OCR is not available on the server. "
+            f"Configured command: '{configured_path}'. "
+            "On Render, install it via nixpacks and redeploy."
+        ) from exc
 
 NORM_CHARS = {
     "0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "9": "g", "$": "s", "@": "a", "6": "g", "2": "z",
@@ -284,6 +306,7 @@ def predict_file():
             with pdfplumber.open(file) as pdf:
                 extracted_text = " ".join([page.extract_text() or "" for page in pdf.pages])
         elif filename.endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            ensure_tesseract_available()
             img = Image.open(file.stream)
             if img.mode not in ("RGB", "L"):
                 img = img.convert("RGB")

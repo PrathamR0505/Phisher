@@ -68,6 +68,11 @@ A comprehensive phishing detection application featuring a rule-based engine, a 
   ```bash
   CORS_ORIGINS=https://your-frontend-name.vercel.app
   ```
+- For **Render image uploads**, Render must also install `tesseract` during build. This repo now configures that in [nixpacks.toml](/d:/VS%20Code%20/Phishing%20Detector%20(Hackaholics)/nixpacks.toml), so redeploy the backend after pushing.
+- If Render still cannot find OCR after redeploy, set:
+  ```bash
+  TESSERACT_CMD=/usr/bin/tesseract
+  ```
 - The frontend now refuses to use `127.0.0.1` in production, so if `VITE_API_URL` is missing you will see a clear error instead of silent upload failures.
 
 ## ⚙️ Configuration
