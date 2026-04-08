@@ -1,15 +1,16 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import re, pickle, pandas as pd
+import re
+import pickle
+import pandas as pd
 from difflib import SequenceMatcher
-from typing import Set, List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional
 import os
-import io
 import pdfplumber
 import pytesseract
 from PIL import Image
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="../dist", static_url_path="/")
 # Initialize CORS broadly for development
 CORS(app, resources={r"/*": {
     "origins": "*",
@@ -21,6 +22,7 @@ CORS(app, resources={r"/*": {
 TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 if os.path.exists(TESSERACT_PATH):
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+# On Linux/Heroku, pytesseract will look for 'tesseract' in the system PATH by default.
 
 NORM_CHARS = {
     "0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "9": "g", "$": "s", "@": "a", "6": "g", "2": "z",
@@ -39,12 +41,18 @@ def load_config() -> Dict[str, Any]:
         for _, r in df.iterrows():
             t = r["type"]
             v = str(r["value"]).lower()
-            if t == "trusted_domain" and r["label"] == "safe": trusted.add(v)
-            elif t == "typo_domain": typos.add(v)
-            elif t == "suspicious_tld": suspicious_tlds.add(v)
-            elif t == "brand_keyword": brands.append(v)
-            elif t == "suspicious_word": words.append(v)
-            elif t == "phishing_pattern": patterns.append(v)
+            if t == "trusted_domain" and r["label"] == "safe":
+                trusted.add(v)
+            elif t == "typo_domain":
+                typos.add(v)
+            elif t == "suspicious_tld":
+                suspicious_tlds.add(v)
+            elif t == "brand_keyword":
+                brands.append(v)
+            elif t == "suspicious_word":
+                words.append(v)
+            elif t == "phishing_pattern":
+                patterns.append(v)
         return {"trusted": trusted, "typos": typos, "suspicious_tlds": suspicious_tlds, "brands": brands, "words": words, "patterns": patterns}
     except Exception as e:
         print(f"Error loading config: {e}")
@@ -58,8 +66,10 @@ def load_ml_model():
     if _model is None or _vectorizer is None:
         if not os.path.exists(MODEL_PATH) or not os.path.exists(VECTORIZER_PATH):
             raise FileNotFoundError("Model files not found")
-        _model = pickle.load(open(MODEL_PATH, "rb"))
-        _vectorizer = pickle.load(open(VECTORIZER_PATH, "rb"))
+        with open(MODEL_PATH, "rb") as f:
+            _model = pickle.load(f)
+        with open(VECTORIZER_PATH, "rb") as f:
+            _vectorizer = pickle.load(f)
     return _model, _vectorizer
 
 def extract_domain(url):
@@ -77,13 +87,15 @@ def get_base(domain_str: str) -> Tuple[str, str]:
 
 def normalize(s):
     r = s.lower()
-    for n, l in NORM_CHARS.items(): r = r.replace(n, l)
+    for num, char in NORM_CHARS.items():
+        r = r.replace(num, char)
     return r
 
 def is_typo(target_str: str, brands_list: List[str], thresh: float = 0.7) -> Tuple[bool, Optional[str]]:
     target_str = target_str.lower()
     for b in brands_list:
-        if target_str == b: continue
+        if target_str == b:
+            continue
         norm_target, norm_brand = normalize(target_str), normalize(b)
         if norm_target == norm_brand or SequenceMatcher(None, target_str, b).ratio() >= thresh or SequenceMatcher(None, norm_target, norm_brand).ratio() >= 0.85:
             return True, b
@@ -94,51 +106,65 @@ def is_typo(target_str: str, brands_list: List[str], thresh: float = 0.7) -> Tup
                 prefix = target_str[0:i]
                 suffix = target_str[i+1:]
                 combined = prefix + suffix
-                if combined.startswith(b[:len(target_str)-1]): return True, b
+                if combined.startswith(b[:len(target_str) - 1]):
+                    return True, b
     return False, None
 
 def check_domain(domain: str) -> str:
     domain = domain.lower().strip()
-    if domain in config["trusted"]: return "SAFE"
+    if domain in config["trusted"]:
+        return "SAFE"
     base_domain, full_domain = get_base(domain)
     for t in config["trusted"]:
         trusted_base, _ = get_base(str(t))
-        if trusted_base == base_domain: return "SAFE"
+        if trusted_base == base_domain:
+            return "SAFE"
     for b in config["brands"]:
-        if b in domain and b != base_domain: return "PHISHING"
+        if b in domain and b != base_domain:
+            return "PHISHING"
     typo, _ = is_typo(base_domain, config["brands"], 0.65)
-    if typo: return "PHISHING"
+    if typo:
+        return "PHISHING"
     for t in config["typos"]:
-        if get_base(t)[0] in base_domain or base_domain in get_base(t)[0]: return "PHISHING"
+        if get_base(t)[0] in base_domain or base_domain in get_base(t)[0]:
+            return "PHISHING"
     for tld in config["suspicious_tlds"]:
-        if full_domain.endswith(tld): return "PHISHING"
-    if re.match(r"\d+\.\d+\.\d+\.\d+", domain): return "PHISHING"
+        if full_domain.endswith(tld):
+            return "PHISHING"
+    if re.match(r"\d+\.\d+\.\d+\.\d+", domain):
+        return "PHISHING"
     if re.match(r"^[^a-z]*$|^[a-z]+[0-9]+[a-z]*$|[a-z]([a-z])\1{2,}|^[^aeiou]{4,}$", base_domain) and len(base_domain) >= 4:
         return "PHISHING"
-    return "UNKNOWN"
+    return "SUSPICIOUS"
 
 def check_link(text):
-    return [{"link": l, "domain": extract_domain(l), "status": check_domain(extract_domain(l)) if extract_domain(l) else "PHISHING"} for l in re.findall(r"(https?://\S+)", text, re.I)]
+    results = []
+    for link_str in re.findall(r"(https?://\S+)", text, re.I):
+        d = extract_domain(link_str)
+        status = check_domain(d) if d else "PHISHING"
+        results.append({"link": link_str, "domain": d, "status": status})
+    return results
 
 def analyze_text(text: str) -> Dict[str, Any]:
     try:
         model, vectorizer = load_ml_model()
         ml_available = True
-    except: ml_available = False
+    except Exception:
+        ml_available = False
 
     text = text.lower()
     score = 0
     reasons = []
     links = check_link(text)
-    phishing_links = [l for l in links if l["status"] == "PHISHING"]
-    suspicious_links = [l for l in links if l["status"] == "SUSPICIOUS"]
+    phishing_links = [link_item for link_item in links if link_item["status"] == "PHISHING"]
+    suspicious_links = [link_item for link_item in links if link_item["status"] == "SUSPICIOUS"]
 
     if phishing_links:
         score += 70
-        reasons.extend([f"Phishing domain: '{l['domain']}'" for l in phishing_links])
+        reasons.extend([f"Phishing domain: '{link_item['domain']}'" for link_item in phishing_links])
     if suspicious_links:
         score += 40
-        reasons.extend([f"Suspicious domain: '{l['domain']}'" for l in suspicious_links])
+        reasons.extend([f"Suspicious domain: '{link_item['domain']}'" for link_item in suspicious_links])
     
     has_ip_link = bool(re.findall(r"https?://\d+\.\d+\.\d+\.\d+", text))
     if has_ip_link:
@@ -155,8 +181,10 @@ def analyze_text(text: str) -> Dict[str, Any]:
     found_sensitive = email_words.intersection(sensitive_targets)
     
     score += len(found_critical) * 15 + len(found_action) * 10 + len(found_sensitive) * 5
-    if found_critical: reasons.append(f"Critical indicators: {', '.join(found_critical)}")
-    if found_action: reasons.append(f"Action requested: {', '.join(found_action)}")
+    if found_critical:
+        reasons.append(f"Critical indicators: {', '.join(found_critical)}")
+    if found_action:
+        reasons.append(f"Action requested: {', '.join(found_action)}")
     if found_critical and found_action:
         score += 15
         reasons.append("Pattern: Urgency with required action")
@@ -167,14 +195,15 @@ def analyze_text(text: str) -> Dict[str, Any]:
         score += 35
         reasons.append("Contains known phishing message patterns")
 
-    for l in links:
-        if l["domain"]:
-            b, _ = get_base(l["domain"])
+    for link_item in links:
+        if link_item["domain"]:
+            b, _ = get_base(link_item["domain"])
             t, brand = is_typo(b, config["brands"])
             if t:
                 score += 25
                 reasons.append(f"Link typo detection: '{b}' mimics '{brand}'")
-            if l["status"] == "PHISHING": score += 90
+            if link_item["status"] == "PHISHING":
+                score += 90
 
     if ml_available:
         try:
@@ -183,31 +212,52 @@ def analyze_text(text: str) -> Dict[str, Any]:
             if pred == 1:
                 score += 30
                 reasons.append("ML model identified phishing characteristics")
-            ml_result = {"prediction": "PHISHING" if pred == 1 else "SAFE", "confidence": round(max(prob) * 100, 2)}
-        except: ml_result = {"error": "ML analysis failed"}
-    else: ml_result = {"available": False}
+            ml_result = {
+                "prediction": "PHISHING" if pred == 1 else "SAFE",
+                "confidence": round(max(prob) * 100, 2)
+            }
+        except Exception:
+            ml_result = {"error": "ML analysis failed"}
+    else:
+        ml_result = {"available": False}
 
     score = min(score, 100)
     prediction = "PHISHING" if score >= 80 else "SUSPICIOUS" if score >= 45 else "SAFE"
-    if prediction == "PHISHING" and not (any(l["status"] == "PHISHING" for l in links) or has_ip_link):
+    if prediction == "PHISHING" and not (any(link_item["status"] == "PHISHING" for link_item in links) or has_ip_link):
         prediction = "SUSPICIOUS"
 
     return {"prediction": prediction, "risk_score": score, "reasons": reasons, "links": links, "ml_analysis": ml_result}
 
-@app.route("/")
-def home(): return jsonify({"status": "Backend is running", "endpoints": ["/predict", "/predict-file", "/check-domain", "/reload-config"]})
+@app.route("/api")
+def api_home():
+    return jsonify({
+        "status": "Backend API is running",
+        "endpoints": ["/api/predict", "/api/predict-file", "/api/check-domain", "/api/reload-config"]
+    })
+
+# Serve React App
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 @app.route("/predict", methods=["POST"])
 def predict():
     email = request.json.get("email", "")
-    if not email: return jsonify({"error": "No email content provided"}), 400
+    if not email:
+        return jsonify({"error": "No email content provided"}), 400
     return jsonify(analyze_text(email))
 
 @app.route("/predict-file", methods=["POST"])
 def predict_file():
-    if 'file' not in request.files: return jsonify({"error": "No file part"}), 400
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
     file = request.files['file']
-    if file.filename == '': return jsonify({"error": "No selected file"}), 400
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
     extracted_text = ""
     filename = file.filename.lower()
     try:
@@ -217,8 +267,10 @@ def predict_file():
         elif filename.endswith(('.png', '.jpg', '.jpeg', '.webp')):
             img = Image.open(file.stream)
             extracted_text = pytesseract.image_to_string(img)
-        else: return jsonify({"error": "Unsupported file type"}), 400
-        if not extracted_text.strip(): return jsonify({"error": "No text could be extracted from the file"}), 400
+        else:
+            return jsonify({"error": "Unsupported file type"}), 400
+        if not extracted_text.strip():
+            return jsonify({"error": "No text could be extracted from the file"}), 400
         return jsonify(analyze_text(extracted_text))
     except Exception as e:
         print(f"Error processing file: {e}")
@@ -227,11 +279,16 @@ def predict_file():
 @app.route("/check-domain", methods=["POST"])
 def check_domain_api():
     domain = request.json.get("domain", "").lower()
-    if not domain: return jsonify({"domain": "unknown", "status": "PHISHING", "reason": "No domain"})
+    if not domain:
+        return jsonify({"domain": "unknown", "status": "PHISHING", "reason": "No domain"})
     status = check_domain(domain)
     base, _ = get_base(domain)
     typo, brand = is_typo(base, config["brands"])
-    reason = "Domain is trusted" if status == "SAFE" else (f"Typo of '{brand}'" if typo else "Suspicious domain" if status == "SUSPICIOUS" else "Phishing domain")
+    reason = "Domain is trusted" if status == "SAFE" else (
+        f"Typo of '{brand}'" if typo else
+        "Suspicious domain" if status == "SUSPICIOUS" else
+        "Phishing domain"
+    )
     return jsonify({"domain": domain, "status": status, "base_domain": base, "reason": reason})
 
 @app.route("/reload-config", methods=["POST"])
