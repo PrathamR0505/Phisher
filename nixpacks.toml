@@ -1,14 +1,11 @@
-# Nixpacks configuration for Render
+# Nixpacks configuration for Render (Backend Only)
 # This file installs system dependencies like Tesseract OCR
 
 [phases.setup]
-nixPkgs = ["tesseract", "libtesseract", "pkg-config"]
+nixPkgs = ["tesseract", "libtesseract", "pkg-config", "python311"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt", "npm install"]
-
-[phases.build]
-cmds = ["npm run build"]
+cmds = ["pip install -r requirements.txt"]
 
 [start]
 cmd = "gunicorn backend.app:app"
