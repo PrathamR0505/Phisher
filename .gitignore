@@ -21,7 +21,6 @@ env/
 .ipynb_checkpoints/
 
 # Model Files & Data (Keeping repo clean)
-*.pkl
 *.csv
 !backend/model.pkl
 !backend/vectorizer.pkl
