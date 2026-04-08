@@ -1,73 +1,59 @@
-# React + TypeScript + Vite
+# Phisher: Advanced Phishing Detection System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A comprehensive phishing detection application featuring a rule-based engine and a machine learning ensemble model.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Rule-Based Engine**: Instant domain and text analysis using curated keywords and patterns.
+- **ML Ensemble Model**: Advanced classification using Logistic Regression, Random Forest, and Gradient Boosting.
+- **Unified Dataset**: Trained on 160k+ samples aggregated from multiple industry sources.
 
-## React Compiler
+## Dataset Architecture
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The system now utilizes a unified training pipeline that aggregates several phishing datasets:
 
-## Expanding the ESLint configuration
+- `backend/dataset/`: Directory containing source CSV files (Nazario, Enron, SpamAssasin, etc.).
+- `backend/process_datasets.py`: Normalization script to combine diverse schemas into a standard format.
+- `backend/mega_dataset.csv`: The aggregated dataset (over 165,000 samples).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Getting Started
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Backend Setup
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1. **Install Dependencies**:
+   ```bash
+   pip install flask flask-cors pandas scikit-learn numpy
+   ```
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+2. **Process Datasets**:
+   If you have new data in `backend/dataset/`, run the normalization script:
+   ```bash
+   python backend/process_datasets.py
+   ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+3. **Train Model**:
+   Retrain the ensemble model using the aggregated data:
+   ```bash
+   python backend/train_model.py
+   ```
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+4. **Run Backend**:
+   ```bash
+   python backend/app.py
+   ```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### Frontend Setup
+
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Run Dev Server**:
+   ```bash
+   npm run dev
+   ```
+
+## Configuration
+
+The rule-based detection is controlled via `backend/config_data.csv`. You can add trusted domains, typo keywords, and suspicious patterns directly to this file.
