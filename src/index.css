@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: Inter, system-ui, sans-serif;
+  background: #000;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+@keyframes ambient-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate(4%, -3%) scale(1.06);
+    opacity: 1;
+  }
+}
+
+.ambient-blob {
+  animation: ambient-drift 22s ease-in-out infinite;
+}
+
+.noise-overlay {
+  background-image: repeating-radial-gradient(
+    circle at 15% 20%,
+    rgba(255, 255, 255, 0.04) 0,
+    transparent 2px
+  );
+  mix-blend-mode: overlay;
+}
+
+.play-ring__rotate {
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  animation: play-ring-spin 10s linear infinite;
+}
+
+.play-ring__rotate::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  animation: play-ring-spin 18s linear infinite reverse;
+}
+
+@keyframes play-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Hide Spline logo watermark */
+#spline-wrapper a {
+  display: none !important;
+}
+
+/* Force Spline Canvas to act as cover and fill background */
+#spline-wrapper canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+
