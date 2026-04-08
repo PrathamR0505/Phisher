@@ -18,11 +18,23 @@ CORS(app, resources={r"/*": {
     "allow_headers": ["Content-Type", "Authorization"]
 }})
 
-# Configure Tesseract path (Commonly used on Windows)
-TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-if os.path.exists(TESSERACT_PATH):
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-# On Linux/Heroku, pytesseract will look for 'tesseract' in the system PATH by default.
+# Configure Tesseract path
+# 1. Check Windows default path
+TESSERACT_PATH_WIN = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# 2. Check common Linux/Render paths
+TESSERACT_PATHS_LINUX = ["/usr/bin/tesseract", "/usr/local/bin/tesseract", "/nix/store/*/bin/tesseract"]
+
+if os.path.exists(TESSERACT_PATH_WIN):
+    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH_WIN
+else:
+    # On Linux/Render, it might be in the PATH or specific Nix locations
+    for path_glob in TESSERACT_PATHS_LINUX:
+        import glob
+        matches = glob.glob(path_glob)
+        if matches:
+            pytesseract.pytesseract.tesseract_cmd = matches[0]
+            break
+# If still not set, pytesseract will try 'tesseract' from system PATH
 
 NORM_CHARS = {
     "0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "9": "g", "$": "s", "@": "a", "6": "g", "2": "z",
