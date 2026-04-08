@@ -9,7 +9,7 @@ import {
 
 const pillItems = [
   { id: 'cyber', label: 'SCAN NOW', icon: IconShield, href: '/scan' },
-  { id: 'digital', label: 'DOWNLOAD BROWSER EXTENSION', icon: IconDownload },
+  { id: 'digital', label: 'DOWNLOAD BROWSER EXTENSION', icon: IconDownload, href: 'https://github.com/sahanac0513/phishing-chrome-extention' },
 ] as const
 
 export function Home({
@@ -128,7 +128,14 @@ function ServiceButton({
   return (
     <motion.button
       type="button"
-      onClick={() => href && setLocation(href)}
+      onClick={() => {
+        if (!href) return
+        if (href.startsWith('http')) {
+          window.open(href, '_blank', 'noopener,noreferrer')
+        } else {
+          setLocation(href)
+        }
+      }}
       className="pointer-events-auto group relative flex items-center gap-3 overflow-hidden rounded-full border border-white/10 bg-white/5 px-6 py-3.5 shadow-lg backdrop-blur-md transition-all hover:border-white/30 hover:bg-white/10 hover:shadow-[0_0_24px_rgba(255,255,255,0.1)] active:scale-95 md:gap-4 md:px-8 md:py-4"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}

@@ -63,7 +63,6 @@ export default function App() {
           <Link href="/" className={`transition-colors ${location === '/' ? 'text-white' : 'text-white/60 hover:text-white'}`}>
             HOME
           </Link>
-          <a href="#" className="text-white/60 transition-colors hover:text-white">SERVICES</a>
           <Link href="/contact" className={`transition-colors ${location === '/contact' ? 'text-white' : 'text-white/60 hover:text-white'}`}>
             GET IN TOUCH
           </Link>
