@@ -11,17 +11,17 @@ import pdfplumber
 import pytesseract
 from PIL import Image
 
-app = Flask(__name__, static_folder="../dist", static_url_path="/")
+app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 allowed_origins = [
     origin.strip()
-    for origin in os.environ.get("CORS_ORIGINS", "*").split(",")
+    for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
     if origin.strip()
 ]
 
 CORS(app, resources={r"/*": {
-    "origins": allowed_origins if allowed_origins else "*",
+    "origins": allowed_origins,
     "methods": ["GET", "POST", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }})
@@ -269,21 +269,16 @@ def analyze_text(text: str) -> Dict[str, Any]:
 
     return {"prediction": prediction, "risk_score": score, "reasons": reasons, "links": links, "ml_analysis": ml_result}
 
+@app.route("/health")
+def health_check():
+    return jsonify({"status": "healthy", "service": "phishing-detector-api"}), 200
+
 @app.route("/api")
 def api_home():
     return jsonify({
         "status": "Backend API is running",
-        "endpoints": ["/api/predict", "/api/predict-file", "/api/check-domain", "/api/reload-config"]
+        "endpoints": ["/api/predict", "/api/predict-file", "/api/check-domain", "/api/reload-config", "/health"]
     })
-
-# Serve React App
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve(path):
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    else:
-        return send_from_directory(app.static_folder, 'index.html')
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -347,4 +342,5 @@ def reload():
 
 if __name__ == "__main__":
     print(f"Trusted: {len(config['trusted'])}, Typos: {len(config['typos'])}, TLDs: {len(config['suspicious_tlds'])}")
-    app.run(debug=True, port=5000, host="0.0.0.0")
+    # Disabled reloader to prevent infinite loops on some Windows environments
+    app.run(debug=True, port=int(os.environ.get("PORT", 5000)), host="0.0.0.0", use_reloader=False)

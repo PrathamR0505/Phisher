@@ -8,4 +8,4 @@ nixPkgs = ["tesseract", "libtesseract", "pkg-config", "python311"]
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "gunicorn backend.app:app"
+cmd = "gunicorn --bind 0.0.0.0:$PORT backend.app:app"
