@@ -26,7 +26,7 @@ const resolveApiBase = () => {
   if (import.meta.env.DEV) return 'http://127.0.0.1:5000'
 
   // In production, require an explicit API URL instead of falling back to the user's localhost.
-  return ''
+  return 'MISSING_API_URL'
 }
 
 const API_BASE = resolveApiBase()
